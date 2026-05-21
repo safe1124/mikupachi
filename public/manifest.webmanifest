@@ -1,0 +1,17 @@
+{
+  "name": "ミクパチフィーバー",
+  "short_name": "ミクパチ",
+  "display": "standalone",
+  "background_color": "transparent",
+  "theme_color": "#07161b",
+  "orientation": "portrait",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/miku-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
