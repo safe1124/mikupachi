@@ -621,15 +621,28 @@ export default function App() {
       jackpotAudioRef.current.pause()
       jackpotAudioRef.current.currentTime = 0
     }
+// 39% 확률로 연속 당첨
+const willContinue = Math.random() < 0.39
+if (willContinue) {
+  const winningNumber = randomNumber()
 
-    const willContinue = Math.random() < 0.39
-    if (willContinue) {
-      const winningNumber = randomNumber()
-      if (jackpotLogicRef.current.beginJackpot) {
-        jackpotLogicRef.current.beginJackpot(winningNumber)
-      }
-      return
+  // 연속 당첨 연출 사운드 (기존 당첨음 활용 또는 별도 재생)
+  playTone('win') 
+
+  // 연속 당첨 스플래시 이미지 교체 연출
+  setGame(prev => ({
+    ...prev,
+    jackpotSplash: {
+      image: '/loop_effect.png',
+      number: winningNumber,
     }
+  }))
+
+  if (jackpotLogicRef.current.beginJackpot) {
+    jackpotLogicRef.current.beginJackpot(winningNumber)
+  }
+  return
+}
 
     setGame((prev) => ({
       ...prev,
@@ -1387,8 +1400,8 @@ export default function App() {
                   <b>{formatYen(money.navelRevenue)}</b>
                 </div>
               </div>
-              <p>1玉 4円 / 大当たり 16,000円 / 大当たり中へそ入賞 400円 / 400玉発射で終了 (39%継続)</p>
-            </div>
+              <p>1玉 4円 / 大当たり中へそ入賞 1,000원 / 300玉発射で終了 (39%継続)</p>
+              </div>
 
             <div className="statsGrid">
               <Stat label="持玉" value={game.ammo} />
