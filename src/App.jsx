@@ -12,9 +12,11 @@ const BOARD_W = 360
 const BOARD_H = 620
 const BALL_R = 5.2
 const MAX_ACTIVE_BALLS = 32
+const JACKPOT_MAX_SHOTS = 100
 const BALL_VALUE_YEN = 4
 const JACKPOT_VALUE_YEN = 16000
 const JACKPOT_NAVEL_VALUE_YEN = 400
+const CONTINUATION_IMAGE = '/loop_effect.png'
 const START_POCKET = { x: 180, y: 398, r: 45 }
 const BONUS_POCKETS = [
   { x: 76, y: 486, r: 22, payout: 3 },
@@ -515,6 +517,7 @@ export default function App() {
   const gameRef = useRef(createInitialGame())
   const callbacksRef = useRef({})
   const audioRef = useRef(null)
+  const jackpotEffectAudioRef = useRef(null)
   const spinTimersRef = useRef([])
   const roundTimerRef = useRef(null)
   const splashTimerRef = useRef(null)
@@ -543,30 +546,106 @@ export default function App() {
       ...Object.values(JACKPOT_IMAGES),
       ...Object.values(SPIN_NUMBER_IMAGES),
       ...SPIN_EFFECT_IMAGES,
+      CONTINUATION_IMAGE,
     ].forEach((src) => {
       const image = new Image()
       image.src = src
     })
   }, [])
 
+  const ensureAudioContext = useCallback(() => {
+    const AudioContext = window.AudioContext || window.webkitAudioContext
+    if (!AudioContext) return null
+    if (!audioRef.current) {
+      audioRef.current = new AudioContext()
+    }
+    const ctx = audioRef.current
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {})
+    }
+    return ctx
+  }, [])
+
+  const prepareAudio = useCallback((targetRef, src) => {
+    if (typeof Audio === 'undefined') return null
+    const resolvedSrc = new URL(src, window.location.href).href
+    if (!targetRef.current || targetRef.current.src !== resolvedSrc) {
+      targetRef.current = new Audio(resolvedSrc)
+      targetRef.current.preload = 'auto'
+      targetRef.current.playsInline = true
+      targetRef.current.load()
+    }
+    return targetRef.current
+  }, [])
+
+  const stopAudio = useCallback((targetRef) => {
+    if (!targetRef.current) return
+    targetRef.current.pause()
+    targetRef.current.currentTime = 0
+  }, [])
+
+  const playAudio = useCallback(
+    (targetRef, src, { loop = false, volume = 0.5, restart = true } = {}) => {
+      if (!soundOn) return null
+      const audio = prepareAudio(targetRef, src)
+      if (!audio) return null
+      audio.loop = loop
+      audio.volume = volume
+      audio.muted = false
+      if (restart) {
+        audio.pause()
+        audio.currentTime = 0
+      }
+      const playPromise = audio.play()
+      if (playPromise?.catch) {
+        playPromise.catch(() => {
+          window.setTimeout(() => {
+            audio.play().catch(() => {})
+          }, 80)
+        })
+      }
+      return audio
+    },
+    [prepareAudio, soundOn],
+  )
+
+  const primeAudio = useCallback(() => {
+    if (!soundOn) return
+    ensureAudioContext()
+    ;[
+      [spinAudioRef, '/spin_sound.m4a'],
+      [jackpotAudioRef, '/jackpot_bgm.m4a'],
+      [jackpotEffectAudioRef, '/jackpot_sound.mp3'],
+    ].forEach(([targetRef, src]) => {
+      const audio = prepareAudio(targetRef, src)
+      if (!audio || !audio.paused) return
+      audio.muted = true
+      const playPromise = audio.play()
+      if (playPromise?.then) {
+        playPromise
+          .then(() => {
+            audio.pause()
+            audio.currentTime = 0
+            audio.muted = false
+          })
+          .catch(() => {
+            audio.muted = false
+          })
+      } else {
+        audio.muted = false
+      }
+    })
+  }, [ensureAudioContext, prepareAudio, soundOn])
+
   const playTone = useCallback(
     (kind) => {
       if (!soundOn) return
-      const AudioContext = window.AudioContext || window.webkitAudioContext
-      if (!AudioContext) return
-      if (!audioRef.current) {
-        audioRef.current = new AudioContext()
-      }
-      const ctx = audioRef.current
-      if (ctx.state === 'suspended') {
-        ctx.resume()
-      }
+      const ctx = ensureAudioContext()
+      if (!ctx) return
 
       const now = ctx.currentTime
       if (kind === 'jackpot') {
-        const audio = new Audio('/jackpot_sound.mp3')
-        audio.volume = 0.5
-        audio.play().catch(e => console.error("Audio play failed:", e))
+        playAudio(jackpotEffectAudioRef, '/jackpot_sound.mp3', { volume: 0.5 })
         return
       }
 
@@ -587,7 +666,7 @@ export default function App() {
       osc.start(now)
       osc.stop(now + duration)
     },
-    [soundOn],
+    [ensureAudioContext, playAudio, soundOn],
   )
 
   const clearSpinTimers = useCallback(() => {
@@ -617,32 +696,33 @@ export default function App() {
     window.clearTimeout(roundTimerRef.current)
     roundTransitionRef.current = false
 
-    if (jackpotAudioRef.current) {
-      jackpotAudioRef.current.pause()
-      jackpotAudioRef.current.currentTime = 0
+    stopAudio(jackpotAudioRef)
+
+    const willContinue = Math.random() < 0.39
+    if (willContinue) {
+      const winningNumber = randomNumber()
+      playTone('jackpot')
+      setGame((prev) => ({
+        ...prev,
+        jackpot: {
+          ...prev.jackpot,
+          open: false,
+        },
+        effect: '3000継続!!!',
+        jackpotSplash: {
+          image: CONTINUATION_IMAGE,
+          number: winningNumber,
+        },
+        log: mixLog(prev.log, '3000継続!!! もう一度 大当たり'),
+      }))
+
+      roundTimerRef.current = window.setTimeout(() => {
+        if (jackpotLogicRef.current.beginJackpot) {
+          jackpotLogicRef.current.beginJackpot(winningNumber)
+        }
+      }, 3000)
+      return
     }
-// 39% 확률로 연속 당첨
-const willContinue = Math.random() < 0.39
-if (willContinue) {
-  const winningNumber = randomNumber()
-
-  // 연속 당첨 연출 사운드 (기존 당첨음 활용 또는 별도 재생)
-  playTone('win') 
-
-  // 연속 당첨 스플래시 이미지 교체 연출
-  setGame(prev => ({
-    ...prev,
-    jackpotSplash: {
-      image: '/loop_effect.png',
-      number: winningNumber,
-    }
-  }))
-
-  if (jackpotLogicRef.current.beginJackpot) {
-    jackpotLogicRef.current.beginJackpot(winningNumber)
-  }
-  return
-}
 
     setGame((prev) => ({
       ...prev,
@@ -661,7 +741,7 @@ if (willContinue) {
       log: mixLog(prev.log, `大当たり終了 / フィーバー ${prev.feverSpinsLeft}回`),
     }))
     scheduleNextHeldSpin()
-  }, [scheduleNextHeldSpin])
+  }, [playTone, scheduleNextHeldSpin, stopAudio])
 
   const closeRound = useCallback(() => {
     if (roundTransitionRef.current) return
@@ -704,15 +784,7 @@ if (willContinue) {
       const target = 16000 + Math.floor(Math.random() * 48001)
       playTone('jackpot')
 
-      if (soundOn) {
-        if (jackpotAudioRef.current) {
-          jackpotAudioRef.current.pause()
-          jackpotAudioRef.current.currentTime = 0
-        }
-        jackpotAudioRef.current = new Audio('/jackpot_bgm.m4a')
-        jackpotAudioRef.current.loop = true
-        jackpotAudioRef.current.play().catch(e => console.error("Jackpot BGM play failed:", e))
-      }
+      playAudio(jackpotAudioRef, '/jackpot_bgm.m4a', { loop: true, volume: 0.5 })
 
       window.clearTimeout(splashTimerRef.current)
       window.clearTimeout(roundTimerRef.current)
@@ -752,7 +824,7 @@ if (willContinue) {
         }
       }, 9500)
     },
-    [playTone, soundOn],
+    [playAudio, playTone],
   )
 
   const startSpin = useCallback(
@@ -772,15 +844,7 @@ if (willContinue) {
 
       clearSpinTimers()
 
-      if (soundOn) {
-        if (spinAudioRef.current) {
-          spinAudioRef.current.pause()
-          spinAudioRef.current.currentTime = 0
-        }
-        spinAudioRef.current = new Audio('/spin_sound.m4a')
-        spinAudioRef.current.loop = true
-        spinAudioRef.current.play().catch(e => console.error("Spin audio play failed:", e))
-      }
+      playAudio(spinAudioRef, '/spin_sound.m4a', { loop: true, volume: 0.46 })
 
       const isFever = current.fever
       const jackpotChance = isFever ? 0.34 : 0.16
@@ -882,10 +946,7 @@ if (willContinue) {
           locked[2] = result[2]
           clearSpinTimers()
 
-          if (spinAudioRef.current) {
-            spinAudioRef.current.pause()
-            spinAudioRef.current.currentTime = 0
-          }
+          stopAudio(spinAudioRef)
 
           const won = result[0] === result[1] && result[1] === result[2]
           setGame((prev) => {
@@ -937,7 +998,7 @@ if (willContinue) {
         }, 2300),
       )
     },
-    [clearSpinTimers, playTone, pushTimer, scheduleNextHeldSpin, soundOn],
+    [clearSpinTimers, playAudio, playTone, pushTimer, scheduleNextHeldSpin, stopAudio],
   )
 
   useEffect(() => {
@@ -1015,7 +1076,7 @@ if (willContinue) {
   }, [playTone])
 
   useEffect(() => {
-    if (game.jackpot.active && game.jackpot.shots >= 300) {
+    if (game.jackpot.active && game.jackpot.shots >= JACKPOT_MAX_SHOTS) {
       if (jackpotLogicRef.current.endJackpot) {
         jackpotLogicRef.current.endJackpot()
       }
@@ -1069,21 +1130,32 @@ if (willContinue) {
   }, [])
 
   const startHoldFire = useCallback(() => {
+    primeAudio()
     fireBall()
     stopHoldFire()
     shotIntervalRef.current = window.setInterval(fireBall, 185)
-  }, [fireBall, stopHoldFire])
+  }, [fireBall, primeAudio, stopHoldFire])
 
   const resetGame = useCallback(() => {
     clearSpinTimers()
     window.clearTimeout(roundTimerRef.current)
     window.clearTimeout(splashTimerRef.current)
     stopHoldFire()
+    stopAudio(spinAudioRef)
+    stopAudio(jackpotAudioRef)
+    stopAudio(jackpotEffectAudioRef)
     ballsRef.current = []
     roundTransitionRef.current = false
     setAutoFire(false)
     setGame(createInitialGame())
-  }, [clearSpinTimers, stopHoldFire])
+  }, [clearSpinTimers, stopAudio, stopHoldFire])
+
+  useEffect(() => {
+    if (soundOn) return
+    stopAudio(spinAudioRef)
+    stopAudio(jackpotAudioRef)
+    stopAudio(jackpotEffectAudioRef)
+  }, [soundOn, stopAudio])
 
   const addBalls = useCallback(() => {
     setGame((prev) => ({
@@ -1400,7 +1472,7 @@ if (willContinue) {
                   <b>{formatYen(money.navelRevenue)}</b>
                 </div>
               </div>
-              <p>1玉 4円 / 大当たり中へそ入賞 1,000원 / 300玉発射で終了 (39%継続)</p>
+              <p>1玉 4円 / 大当たり 16,000円 / 大当たり中へそ入賞 400円 / 100玉発射で終了 (39%継続)</p>
               </div>
 
             <div className="statsGrid">
@@ -1438,7 +1510,14 @@ if (willContinue) {
               </button>
 
               <div className="smallControls">
-                <button className={autoFire ? 'active' : ''} type="button" onClick={() => setAutoFire((value) => !value)}>
+                <button
+                  className={autoFire ? 'active' : ''}
+                  type="button"
+                  onClick={() => {
+                    primeAudio()
+                    setAutoFire((value) => !value)
+                  }}
+                >
                   <Sparkles size={17} />
                   オート
                 </button>
