@@ -59,13 +59,14 @@ button {
 .machine {
   position: relative;
   width: min(100%, 1080px);
-  border: 4px solid rgba(255, 225, 155, 0.86);
+  border: 4px solid rgba(255, 225, 155, 0.92);
   border-radius: 30px;
   padding: 22px 24px 18px;
   background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.3), transparent 11%),
     linear-gradient(90deg, rgba(255, 255, 255, 0.18), transparent 10%, transparent 90%, rgba(255, 255, 255, 0.18)),
     radial-gradient(circle at 50% -10%, rgba(255, 209, 102, 0.34), transparent 36%),
-    linear-gradient(135deg, rgba(198, 27, 66, 0.72), rgba(34, 8, 22, 0.84) 28%, rgba(4, 12, 16, 0.92) 58%),
+    linear-gradient(135deg, rgba(198, 27, 66, 0.84), rgba(62, 10, 35, 0.9) 26%, rgba(4, 12, 16, 0.94) 58%),
     #090f13;
   box-shadow:
     0 28px 84px rgba(0, 0, 0, 0.55),
@@ -85,10 +86,12 @@ button {
 .machine::before {
   inset: 8px;
   border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 2px solid rgba(255, 255, 255, 0.2);
   box-shadow:
+    inset 0 0 0 2px rgba(255, 209, 102, 0.12),
     inset 0 0 28px rgba(255, 255, 255, 0.08),
-    inset 0 0 52px rgba(35, 224, 212, 0.1);
+    inset 0 0 52px rgba(35, 224, 212, 0.1),
+    inset 0 0 90px rgba(255, 90, 167, 0.08);
 }
 
 .machine::after {
@@ -121,9 +124,34 @@ button {
   border: 1px solid rgba(255, 225, 155, 0.24);
   border-radius: 18px;
   background:
+    radial-gradient(circle at 50% 0, rgba(255, 209, 102, 0.28), transparent 42%),
+    linear-gradient(90deg, rgba(116, 13, 38, 0.88), rgba(9, 20, 24, 0.7) 36%, rgba(116, 13, 38, 0.88)),
     linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent),
     rgba(2, 8, 11, 0.48);
-  box-shadow: inset 0 0 24px rgba(255, 209, 102, 0.08);
+  box-shadow:
+    inset 0 -3px 0 rgba(0, 0, 0, 0.24),
+    inset 0 0 24px rgba(255, 209, 102, 0.14),
+    0 0 16px rgba(255, 90, 167, 0.12);
+}
+
+.topBar::after {
+  content: "";
+  position: absolute;
+  left: 84px;
+  right: 62px;
+  bottom: 7px;
+  height: 5px;
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #ffd166 0 6px,
+      #ff5aa7 6px 12px,
+      #23e0d4 12px 18px,
+      transparent 18px 23px
+    );
+  opacity: 0.72;
+  filter: drop-shadow(0 0 5px rgba(255, 209, 102, 0.7));
 }
 
 .lampRail {
@@ -363,20 +391,47 @@ button {
   min-width: 0;
   display: grid;
   place-items: center;
-  border: 5px solid rgba(222, 236, 241, 0.28);
+  border: 5px solid rgba(234, 244, 248, 0.36);
   border-radius: 24px;
   background:
     radial-gradient(circle at 50% 50%, rgba(255, 209, 102, 0.1), transparent 54%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01)),
     rgba(2, 9, 12, 0.7);
   box-shadow:
+    0 0 0 3px rgba(255, 209, 102, 0.18),
     inset 0 0 0 2px rgba(255, 225, 155, 0.22),
     inset 0 0 36px rgba(0, 0, 0, 0.42),
     0 0 22px rgba(255, 209, 102, 0.1);
   overflow: hidden;
 }
 
+.canvasFrame::before,
+.canvasFrame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.canvasFrame::before {
+  z-index: 1;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.16), transparent 18%, transparent 62%, rgba(255, 255, 255, 0.07)),
+    radial-gradient(circle at 50% 0, rgba(255, 209, 102, 0.08), transparent 42%);
+  mix-blend-mode: screen;
+}
+
+.canvasFrame::after {
+  z-index: 2;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    inset 0 0 18px rgba(255, 209, 102, 0.12);
+}
+
 canvas {
+  position: relative;
+  z-index: 0;
   width: min(100%, 390px);
   max-height: min(68svh, 690px);
   display: block;
@@ -385,6 +440,7 @@ canvas {
 
 .effectBadge {
   position: absolute;
+  z-index: 3;
   top: 10px;
   left: 10px;
   max-width: calc(100% - 20px);
@@ -656,6 +712,248 @@ canvas {
   background: radial-gradient(circle, rgba(2, 10, 14, 0.2), rgba(2, 10, 14, 0.74));
 }
 
+.spinOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  padding: max(12px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 16%, rgba(255, 209, 102, 0.32), transparent 28%),
+    radial-gradient(circle at 18% 64%, rgba(255, 90, 167, 0.24), transparent 34%),
+    radial-gradient(circle at 82% 70%, rgba(35, 224, 212, 0.2), transparent 32%),
+    rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
+
+.spinBackdrop {
+  position: absolute;
+  inset: -5%;
+  width: 110%;
+  height: 110%;
+  object-fit: cover;
+  opacity: 0.3;
+  filter: blur(7px) brightness(0.72) saturate(1.45);
+  transform: scale(1.06);
+  animation: spinBackdropPulse 760ms ease-in-out infinite alternate;
+}
+
+.spinRays,
+.spinRays::before,
+.spinRays::after {
+  content: "";
+  position: absolute;
+  inset: -35%;
+  background:
+    repeating-conic-gradient(
+      from 0deg,
+      rgba(255, 255, 255, 0.18) 0 5deg,
+      transparent 5deg 13deg,
+      rgba(35, 224, 212, 0.14) 13deg 18deg,
+      transparent 18deg 27deg
+    );
+  opacity: 0.72;
+  mix-blend-mode: screen;
+  animation: spinRays 1.45s linear infinite;
+}
+
+.spinRays::before {
+  inset: 10%;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(circle, rgba(255, 209, 102, 0.22) 0 2px, transparent 2px 14px),
+    radial-gradient(circle, transparent 0 42%, rgba(255, 90, 167, 0.22) 44%, transparent 58%);
+  animation-duration: 940ms;
+  animation-direction: reverse;
+}
+
+.spinRays::after {
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.26), transparent),
+    radial-gradient(circle, rgba(255, 255, 255, 0.32), transparent 54%);
+  opacity: 0.28;
+  animation: spinScan 680ms linear infinite;
+}
+
+.spinStage {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: clamp(10px, 2.4svh, 18px);
+  width: min(100%, 760px);
+  height: min(100%, 820px);
+  max-height: calc(100svh - 24px);
+}
+
+.spinHeader,
+.spinFooter {
+  justify-self: center;
+  min-width: min(92vw, 390px);
+  padding: 8px 14px;
+  border: 2px solid rgba(255, 209, 102, 0.82);
+  border-radius: 8px;
+  color: #fff;
+  text-align: center;
+  background:
+    linear-gradient(90deg, rgba(255, 90, 167, 0.34), rgba(35, 224, 212, 0.24)),
+    rgba(5, 13, 20, 0.78);
+  box-shadow:
+    inset 0 0 16px rgba(255, 255, 255, 0.16),
+    0 0 24px rgba(255, 209, 102, 0.32);
+}
+
+.spinHeader span,
+.spinFooter span {
+  display: block;
+  color: #8af1ff;
+  font-size: clamp(0.66rem, 2.4vw, 0.82rem);
+  font-weight: 900;
+}
+
+.spinHeader strong {
+  display: block;
+  margin-top: 2px;
+  color: #fff;
+  font-size: clamp(1.22rem, 5.4vw, 2.4rem);
+  line-height: 1;
+  text-shadow:
+    0 0 12px rgba(255, 90, 167, 0.95),
+    0 0 24px rgba(35, 224, 212, 0.75);
+}
+
+.spinReelDeck {
+  align-self: center;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(5px, 1.8vw, 14px);
+  min-height: 0;
+  perspective: 900px;
+}
+
+.spinCard {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 1086 / 1448;
+  overflow: hidden;
+  border: 2px solid rgba(255, 224, 138, 0.9);
+  border-radius: 8px;
+  background: #05070c;
+  box-shadow:
+    inset 0 0 18px rgba(255, 255, 255, 0.18),
+    0 0 20px rgba(255, 90, 167, 0.38),
+    0 0 34px rgba(35, 224, 212, 0.24);
+  transform: translateZ(0);
+}
+
+.spinCard img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: brightness(1.04) saturate(1.12);
+}
+
+.spinCard.rolling img {
+  animation: slotRoll 120ms linear infinite;
+  animation-delay: var(--delay);
+}
+
+.spinCard.rolling::before {
+  content: "";
+  position: absolute;
+  inset: -10% 0;
+  z-index: 1;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0 8px,
+    rgba(255, 255, 255, 0.2) 8px 10px,
+    transparent 10px 18px
+  );
+  mix-blend-mode: screen;
+  animation: reelScanDown 180ms linear infinite;
+}
+
+.spinCard.locked {
+  animation: reelLock 320ms cubic-bezier(0.18, 0.92, 0.28, 1.24) both;
+}
+
+.spinCard.final {
+  box-shadow:
+    inset 0 0 20px rgba(255, 255, 255, 0.2),
+    0 0 30px rgba(255, 209, 102, 0.54),
+    0 0 50px rgba(255, 90, 167, 0.34);
+}
+
+.spinCard span {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  z-index: 2;
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  border-radius: 999px;
+  color: #fff;
+  font-size: clamp(0.52rem, 1.8vw, 0.68rem);
+  font-weight: 900;
+  background: rgba(0, 0, 0, 0.52);
+  text-shadow: 0 0 8px rgba(255, 90, 167, 0.9);
+}
+
+.spinFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.spinFooter b {
+  color: #ffd166;
+  font-size: clamp(1.1rem, 4.6vw, 1.8rem);
+  line-height: 1;
+  text-shadow:
+    0 0 10px rgba(255, 209, 102, 0.9),
+    0 0 22px rgba(255, 90, 167, 0.72);
+}
+
+.spinAccent,
+.spinWinLogo {
+  position: absolute;
+  z-index: 3;
+  width: min(72vw, 520px);
+  max-height: 28svh;
+  object-fit: contain;
+  filter: drop-shadow(0 0 18px rgba(255, 209, 102, 0.78)) saturate(1.18);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.spinAccent {
+  top: 8svh;
+  animation: logoCrash 440ms cubic-bezier(0.18, 0.88, 0.28, 1.18) both;
+}
+
+.spinWinLogo {
+  top: 13svh;
+  width: min(82vw, 620px);
+  animation: jackpotLogoBurst 620ms cubic-bezier(0.16, 0.9, 0.22, 1.16) both;
+}
+
+.spinOverlay.isReach .spinHeader strong {
+  color: #ffd166;
+}
+
+.spinOverlay.isWin {
+  background:
+    radial-gradient(circle at 50% 34%, rgba(255, 209, 102, 0.42), transparent 34%),
+    radial-gradient(circle at 50% 74%, rgba(255, 90, 167, 0.32), transparent 38%),
+    rgba(0, 0, 0, 0.9);
+}
+
 .jackpotSplash {
   position: fixed;
   inset: 0;
@@ -836,6 +1134,90 @@ canvas {
 @keyframes jackpotSpin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes spinBackdropPulse {
+  0% {
+    transform: scale(1.04);
+    opacity: 0.22;
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: 0.36;
+  }
+}
+
+@keyframes spinRays {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spinScan {
+  0% {
+    transform: translateX(-80%) rotate(10deg);
+  }
+  100% {
+    transform: translateX(80%) rotate(10deg);
+  }
+}
+
+@keyframes slotRoll {
+  0% {
+    transform: translateY(-8%) scale(1.04);
+    filter: blur(2px) brightness(1.6) saturate(1.4);
+  }
+  100% {
+    transform: translateY(8%) scale(1.04);
+    filter: blur(3px) brightness(1.28) saturate(1.5);
+  }
+}
+
+@keyframes reelScanDown {
+  to {
+    transform: translateY(18px);
+  }
+}
+
+@keyframes reelLock {
+  0% {
+    transform: scale(1.15) rotateY(-8deg);
+    filter: brightness(1.8);
+  }
+  62% {
+    transform: scale(0.96) rotateY(4deg);
+  }
+  100% {
+    transform: scale(1) rotateY(0deg);
+    filter: brightness(1);
+  }
+}
+
+@keyframes logoCrash {
+  0% {
+    opacity: 0;
+    transform: translateY(-44px) scale(1.8) rotate(-4deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(-1deg);
+  }
+}
+
+@keyframes jackpotLogoBurst {
+  0% {
+    opacity: 0;
+    transform: scale(0.28) rotate(-8deg);
+    filter: brightness(2.4) saturate(1.5);
+  }
+  64% {
+    transform: scale(1.12) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    filter: brightness(1.1) saturate(1.18);
   }
 }
 
@@ -1097,6 +1479,58 @@ canvas {
   .roundText {
     margin-top: 6px;
     font-size: 0.62rem;
+  }
+
+  .spinOverlay {
+    padding: max(8px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+  }
+
+  .spinStage {
+    gap: 8px;
+    width: 100%;
+    height: 100%;
+    max-height: calc(100svh - 16px);
+  }
+
+  .spinHeader,
+  .spinFooter {
+    min-width: min(96vw, 390px);
+    padding: 7px 10px;
+    border-radius: 7px;
+  }
+
+  .spinHeader strong {
+    font-size: clamp(1.1rem, 7vw, 1.75rem);
+  }
+
+  .spinReelDeck {
+    gap: 4px;
+    align-items: center;
+  }
+
+  .spinCard {
+    border-width: 1px;
+    border-radius: 6px;
+  }
+
+  .spinCard span {
+    right: 4px;
+    bottom: 4px;
+    padding: 2px 5px;
+    font-size: 0.5rem;
+  }
+
+  .spinAccent {
+    top: 9svh;
+    width: 86vw;
+    max-height: 18svh;
+  }
+
+  .spinWinLogo {
+    top: 11svh;
+    width: 92vw;
+    max-height: 20svh;
   }
 }
 

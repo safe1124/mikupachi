@@ -14,7 +14,8 @@ const BALL_R = 5.2
 const MAX_ACTIVE_BALLS = 32
 const BALL_VALUE_YEN = 4
 const JACKPOT_VALUE_YEN = 16000
-const START_POCKET = { x: 180, y: 398, r: 28 }
+const JACKPOT_NAVEL_VALUE_YEN = 400
+const START_POCKET = { x: 180, y: 398, r: 45 }
 const BONUS_POCKETS = [
   { x: 76, y: 486, r: 22, payout: 3 },
   { x: 284, y: 486, r: 22, payout: 3 },
@@ -38,6 +39,16 @@ const JACKPOT_IMAGES = {
   6: '/jackpots/666.png',
   7: '/jackpots/333.png',
 }
+const SPIN_NUMBER_IMAGES = {
+  1: '/spin/num1.png',
+  2: '/spin/num2.png',
+  3: '/spin/num3.png',
+  4: '/spin/num4.png',
+  5: '/spin/num5.png',
+  6: '/spin/num6.png',
+  7: '/spin/num7.png',
+}
+const SPIN_EFFECT_IMAGES = ['/spin/effect-1.png', '/spin/effect-2.png', '/spin/effect-3.png']
 
 const randomNumber = () => Math.floor(Math.random() * 7) + 1
 const yenFormatter = new Intl.NumberFormat('ja-JP')
@@ -51,6 +62,17 @@ const getModeLabel = (game) => {
   if (game.reach) return 'リーチ'
   return '通常'
 }
+const createSpinOverlay = () => ({
+  active: false,
+  reels: [1, 2, 3],
+  locked: [false, false, false],
+  result: null,
+  reach: false,
+  won: false,
+  final: false,
+  message: '待機',
+  accentIndex: 0,
+})
 
 function buildPins() {
   const pins = []
@@ -84,6 +106,7 @@ const createInitialGame = () => ({
   shots: 0,
   captured: 0,
   payout: 0,
+  jackpotNavelRevenue: 0,
   spins: 0,
   jackpots: 0,
   holds: 0,
@@ -92,6 +115,7 @@ const createInitialGame = () => ({
   reach: false,
   fever: false,
   feverSpinsLeft: 0,
+  spinOverlay: createSpinOverlay(),
   effect: '待機',
   log: ['ミクパチフィーバー 起動'],
   jackpotSplash: null,
@@ -102,6 +126,9 @@ const createInitialGame = () => ({
     maxRounds: 0,
     hits: 0,
     number: null,
+    target: 0,
+    earned: 0,
+    shots: 0,
   },
 })
 
@@ -206,7 +233,10 @@ function BigEffect({ game }) {
       <div className="bigEffect jackpotEffect" aria-live="polite">
         <div className="pulseText">{game.jackpot.number === 7 ? '超大当たり' : '大当たり'}</div>
         <div className="roundText">
-          ラウンド {game.jackpot.round}/{game.jackpot.maxRounds} 入賞 {game.jackpot.hits}/6
+          第 {game.jackpot.round} ラウンド
+        </div>
+        <div className="roundText" style={{ fontSize: '0.9rem', marginTop: '4px' }}>
+          収穫 {formatYen(game.jackpot.earned)} / 使用玉 {game.jackpot.shots}
         </div>
         <div className="confetti">
           {Array.from({ length: 18 }).map((_, index) => (
@@ -231,6 +261,62 @@ function JackpotSplash({ splash }) {
   return (
     <div className="jackpotSplash" aria-live="assertive">
       <img src={splash.image} alt={`${splash.number}${splash.number}${splash.number} 大当たり`} />
+    </div>
+  )
+}
+
+function SpinOverlay({ overlay }) {
+  if (!overlay?.active) return null
+
+  const centerNumber = overlay.reels[1] ?? overlay.reels[0] ?? 1
+  const resultText = overlay.result?.join('') ?? overlay.reels.join('')
+  const headline = overlay.final
+    ? overlay.won
+      ? '大当たり'
+      : 'ハズレ'
+    : overlay.reach
+      ? 'リーチ'
+      : '図柄変動'
+  const accentSrc = SPIN_EFFECT_IMAGES[overlay.accentIndex % SPIN_EFFECT_IMAGES.length]
+
+  return (
+    <div
+      className={`spinOverlay ${overlay.reach ? 'isReach' : ''} ${overlay.final ? 'isFinal' : ''} ${
+        overlay.won ? 'isWin' : ''
+      }`}
+      aria-live="assertive"
+    >
+      <img className="spinBackdrop" src={SPIN_NUMBER_IMAGES[centerNumber]} alt="" aria-hidden="true" />
+      <div className="spinRays" aria-hidden="true" />
+      <div className="spinStage">
+        <div className="spinHeader">
+          <span>{headline}</span>
+          <strong>{overlay.message}</strong>
+        </div>
+
+        <div className="spinReelDeck" aria-label="抽選図柄">
+          {overlay.reels.map((value, index) => (
+            <div
+              className={`spinCard ${overlay.locked[index] ? 'locked' : 'rolling'} ${
+                overlay.final ? 'final' : ''
+              }`}
+              key={`${index}-${value}-${overlay.locked[index]}`}
+              style={{ '--delay': `${index * 84}ms` }}
+            >
+              <img src={SPIN_NUMBER_IMAGES[value]} alt={`${value}図柄`} />
+              <span>{overlay.locked[index] ? '停止' : '回転'}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="spinFooter">
+          <span>{overlay.reach ? '最後の図柄을 待て' : '1 - 7 図柄抽選中'}</span>
+          <b>{overlay.final ? resultText : '???'}</b>
+        </div>
+      </div>
+
+      {overlay.reach && <img className="spinAccent" src={accentSrc} alt="" aria-hidden="true" />}
+      {overlay.won && <img className="spinWinLogo" src={SPIN_EFFECT_IMAGES[1]} alt="大当たり" />}
     </div>
   )
 }
@@ -262,8 +348,22 @@ function drawBoard(ctx, balls, game, time) {
 
   ctx.save()
   ctx.globalAlpha = 0.72
-  ctx.strokeStyle = '#16363d'
-  ctx.lineWidth = 12
+  ctx.strokeStyle = '#0a151a'
+  ctx.lineWidth = 22
+  ctx.beginPath()
+  ctx.moveTo(329, 560)
+  ctx.quadraticCurveTo(342, 260, 325, 68)
+  ctx.quadraticCurveTo(250, 28, 178, 31)
+  ctx.stroke()
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.26)'
+  ctx.lineWidth = 15
+  ctx.beginPath()
+  ctx.moveTo(329, 560)
+  ctx.quadraticCurveTo(342, 260, 325, 68)
+  ctx.quadraticCurveTo(250, 28, 178, 31)
+  ctx.stroke()
+  ctx.strokeStyle = '#12343c'
+  ctx.lineWidth = 11
   ctx.beginPath()
   ctx.moveTo(329, 560)
   ctx.quadraticCurveTo(342, 260, 325, 68)
@@ -276,6 +376,17 @@ function drawBoard(ctx, balls, game, time) {
   ctx.quadraticCurveTo(342, 260, 325, 68)
   ctx.quadraticCurveTo(250, 28, 178, 31)
   ctx.stroke()
+  ctx.strokeStyle = 'rgba(255, 209, 102, 0.72)'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(315, 552)
+  ctx.quadraticCurveTo(326, 260, 314, 82)
+  ctx.quadraticCurveTo(256, 48, 188, 49)
+  ctx.stroke()
+  ctx.fillStyle = `rgba(255, 209, 102, ${0.22 + shimmer * 0.18})`
+  ctx.beginPath()
+  ctx.arc(315, 73, 8 + shimmer * 2, 0, Math.PI * 2)
+  ctx.fill()
   ctx.restore()
 
   ctx.save()
@@ -290,7 +401,7 @@ function drawBoard(ctx, balls, game, time) {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillStyle = 'rgba(255, 255, 255, 0.72)'
-  ctx.fillText('ミクパチ', 180, 58)
+  ctx.fillText('ミクパ치', 180, 58)
 
   PINS.forEach((pin, index) => {
     const twinkle = (Math.sin(time / 260 + index) + 1) / 2
@@ -407,10 +518,17 @@ export default function App() {
   const spinTimersRef = useRef([])
   const roundTimerRef = useRef(null)
   const splashTimerRef = useRef(null)
+  const spinAudioRef = useRef(null)
+  const jackpotAudioRef = useRef(null)
   const roundTransitionRef = useRef(false)
   const shotIntervalRef = useRef(null)
   const lastShotRef = useRef(0)
   const ballIdRef = useRef(1)
+  const jackpotLogicRef = useRef({
+    beginJackpot: null,
+    endJackpot: null,
+    closeRound: null,
+  })
   const [game, setGame] = useState(() => createInitialGame())
   const [power, setPower] = useState(88)
   const [autoFire, setAutoFire] = useState(false)
@@ -421,7 +539,11 @@ export default function App() {
   }, [game])
 
   useEffect(() => {
-    Object.values(JACKPOT_IMAGES).forEach((src) => {
+    [
+      ...Object.values(JACKPOT_IMAGES),
+      ...Object.values(SPIN_NUMBER_IMAGES),
+      ...SPIN_EFFECT_IMAGES,
+    ].forEach((src) => {
       const image = new Image()
       image.src = src
     })
@@ -442,42 +564,9 @@ export default function App() {
 
       const now = ctx.currentTime
       if (kind === 'jackpot') {
-        const master = ctx.createGain()
-        master.gain.setValueAtTime(0.001, now)
-        master.gain.exponentialRampToValueAtTime(0.16, now + 0.03)
-        master.gain.exponentialRampToValueAtTime(0.001, now + 2.8)
-        master.connect(ctx.destination)
-
-        const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98, 2093]
-        notes.forEach((freq, index) => {
-          const start = now + index * 0.105
-          const osc = ctx.createOscillator()
-          const gain = ctx.createGain()
-          osc.type = index % 2 === 0 ? 'square' : 'triangle'
-          osc.frequency.setValueAtTime(freq, start)
-          osc.frequency.exponentialRampToValueAtTime(freq * 1.18, start + 0.18)
-          gain.gain.setValueAtTime(0.001, start)
-          gain.gain.exponentialRampToValueAtTime(0.08, start + 0.018)
-          gain.gain.exponentialRampToValueAtTime(0.001, start + 0.36)
-          osc.connect(gain).connect(master)
-          osc.start(start)
-          osc.stop(start + 0.38)
-        })
-
-        const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.9), ctx.sampleRate)
-        const data = buffer.getChannelData(0)
-        for (let index = 0; index < data.length; index += 1) {
-          data[index] = (Math.random() * 2 - 1) * (1 - index / data.length)
-        }
-        const noise = ctx.createBufferSource()
-        const noiseGain = ctx.createGain()
-        noise.buffer = buffer
-        noiseGain.gain.setValueAtTime(0.001, now + 0.08)
-        noiseGain.gain.exponentialRampToValueAtTime(0.12, now + 0.12)
-        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.92)
-        noise.connect(noiseGain).connect(master)
-        noise.start(now + 0.08)
-        noise.stop(now + 1)
+        const audio = new Audio('/jackpot_sound.mp3')
+        audio.volume = 0.5
+        audio.play().catch(e => console.error("Audio play failed:", e))
         return
       }
 
@@ -517,7 +606,9 @@ export default function App() {
     window.setTimeout(() => {
       const current = gameRef.current
       if (current.holds > 0 && !current.spinning && !current.jackpot.active) {
-        startSpin(true)
+        if (jackpotLogicRef.current.startSpin) {
+            jackpotLogicRef.current.startSpin(true)
+        }
       }
     }, 650)
   }, [])
@@ -525,6 +616,21 @@ export default function App() {
   const endJackpot = useCallback(() => {
     window.clearTimeout(roundTimerRef.current)
     roundTransitionRef.current = false
+
+    if (jackpotAudioRef.current) {
+      jackpotAudioRef.current.pause()
+      jackpotAudioRef.current.currentTime = 0
+    }
+
+    const willContinue = Math.random() < 0.39
+    if (willContinue) {
+      const winningNumber = randomNumber()
+      if (jackpotLogicRef.current.beginJackpot) {
+        jackpotLogicRef.current.beginJackpot(winningNumber)
+      }
+      return
+    }
+
     setGame((prev) => ({
       ...prev,
       jackpot: {
@@ -534,6 +640,9 @@ export default function App() {
         maxRounds: 0,
         hits: 0,
         number: null,
+        target: 0,
+        earned: 0,
+        shots: 0,
       },
       effect: `フィーバー残り ${prev.feverSpinsLeft}`,
       log: mixLog(prev.log, `大当たり終了 / フィーバー ${prev.feverSpinsLeft}回`),
@@ -557,10 +666,6 @@ export default function App() {
     window.setTimeout(() => {
       const latest = gameRef.current
       if (!latest.jackpot.active) return
-      if (latest.jackpot.round >= latest.jackpot.maxRounds) {
-        endJackpot()
-        return
-      }
       roundTransitionRef.current = false
       setGame((prev) => ({
         ...prev,
@@ -572,14 +677,30 @@ export default function App() {
         },
         effect: `第${prev.jackpot.round + 1}ラウンド開始`,
       }))
-      roundTimerRef.current = window.setTimeout(closeRound, 9500)
+      roundTimerRef.current = window.setTimeout(() => {
+        if (jackpotLogicRef.current.closeRound) {
+            jackpotLogicRef.current.closeRound()
+        }
+      }, 9500)
     }, 950)
-  }, [endJackpot])
+  }, [])
 
   const beginJackpot = useCallback(
     (number) => {
       const maxRounds = number === 7 ? 10 : number >= 5 ? 7 : 5
+      const target = 16000 + Math.floor(Math.random() * 48001)
       playTone('jackpot')
+
+      if (soundOn) {
+        if (jackpotAudioRef.current) {
+          jackpotAudioRef.current.pause()
+          jackpotAudioRef.current.currentTime = 0
+        }
+        jackpotAudioRef.current = new Audio('/jackpot_bgm.m4a')
+        jackpotAudioRef.current.loop = true
+        jackpotAudioRef.current.play().catch(e => console.error("Jackpot BGM play failed:", e))
+      }
+
       window.clearTimeout(splashTimerRef.current)
       window.clearTimeout(roundTimerRef.current)
       roundTransitionRef.current = false
@@ -588,7 +709,7 @@ export default function App() {
         jackpots: prev.jackpots + 1,
         fever: true,
         feverSpinsLeft: number === 7 ? 32 : 18,
-        effect: number === 7 ? '超大当たり +¥16,000' : '大当たり +¥16,000',
+        effect: number === 7 ? '超大当たり' : '大当たり',
         jackpot: {
           active: true,
           open: true,
@@ -596,22 +717,29 @@ export default function App() {
           maxRounds,
           hits: 0,
           number,
+          target,
+          earned: 0,
+          shots: 0,
         },
         jackpotSplash: {
           image: JACKPOT_IMAGES[number] ?? JACKPOT_IMAGES[3],
           number,
         },
-        log: mixLog(prev.log, `${number}${number}${number} 大当たり / +¥16,000 / ${maxRounds}R`),
+        log: mixLog(prev.log, `${number}${number}${number} 大当たり / ${maxRounds}R`),
       }))
       splashTimerRef.current = window.setTimeout(() => {
         setGame((prev) => ({
           ...prev,
           jackpotSplash: null,
         }))
-      }, 3000)
-      roundTimerRef.current = window.setTimeout(closeRound, 9500)
+      }, 5000)
+      roundTimerRef.current = window.setTimeout(() => {
+        if (jackpotLogicRef.current.closeRound) {
+            jackpotLogicRef.current.closeRound()
+        }
+      }, 9500)
     },
-    [closeRound, playTone],
+    [playTone, soundOn],
   )
 
   const startSpin = useCallback(
@@ -622,7 +750,7 @@ export default function App() {
           setGame((prev) => ({
             ...prev,
             holds: Math.min(4, prev.holds + 1),
-            effect: '保留 +1',
+            effect: current.jackpot.active ? prev.effect : '保留 +1',
             log: mixLog(prev.log, '保留ランプ点灯'),
           }))
         }
@@ -630,6 +758,17 @@ export default function App() {
       }
 
       clearSpinTimers()
+
+      if (soundOn) {
+        if (spinAudioRef.current) {
+          spinAudioRef.current.pause()
+          spinAudioRef.current.currentTime = 0
+        }
+        spinAudioRef.current = new Audio('/spin_sound.m4a')
+        spinAudioRef.current.loop = true
+        spinAudioRef.current.play().catch(e => console.error("Spin audio play failed:", e))
+      }
+
       const isFever = current.fever
       const jackpotChance = isFever ? 0.34 : 0.16
       const willWin = Math.random() < jackpotChance
@@ -650,6 +789,15 @@ export default function App() {
       }
 
       const locked = [null, null, null]
+      const initialReels = [randomNumber(), randomNumber(), randomNumber()]
+      const initialOverlay = {
+        ...createSpinOverlay(),
+        active: true,
+        reels: initialReels,
+        result,
+        message: isFever ? 'フィーバー変動開始' : '図柄変動開始',
+        accentIndex: Math.floor(Math.random() * SPIN_EFFECT_IMAGES.length),
+      }
       setGame((prev) => ({
         ...prev,
         holds: consumeHold ? Math.max(0, prev.holds - 1) : prev.holds,
@@ -657,14 +805,23 @@ export default function App() {
         reach: false,
         spins: prev.spins + 1,
         effect: isFever ? 'フィーバー変動開始' : '変動開始',
-        reels: [randomNumber(), randomNumber(), randomNumber()],
+        reels: initialReels,
+        spinOverlay: initialOverlay,
         log: mixLog(prev.log, 'スタートチャッカー入賞'),
       }))
 
       const interval = window.setInterval(() => {
+        const nextReels = locked.map((value) => value ?? randomNumber())
         setGame((prev) => ({
           ...prev,
-          reels: locked.map((value) => value ?? randomNumber()),
+          reels: nextReels,
+          spinOverlay: prev.spinOverlay.active
+            ? {
+                ...prev.spinOverlay,
+                reels: nextReels,
+                locked: locked.map((value) => value !== null),
+              }
+            : prev.spinOverlay,
         }))
       }, 78)
       pushTimer(interval, 'interval')
@@ -672,24 +829,51 @@ export default function App() {
       pushTimer(
         window.setTimeout(() => {
           locked[0] = result[0]
+          setGame((prev) => ({
+            ...prev,
+            spinOverlay: prev.spinOverlay.active
+              ? {
+                  ...prev.spinOverlay,
+                  reels: [result[0], prev.spinOverlay.reels[1], prev.spinOverlay.reels[2]],
+                  locked: [true, false, false],
+                  message: '一図柄停止',
+                }
+              : prev.spinOverlay,
+          }))
           playTone('start')
         }, 620),
       )
       pushTimer(
         window.setTimeout(() => {
           locked[1] = result[1]
+          const isReachResult = result[0] === result[1]
           setGame((prev) => ({
             ...prev,
-            reach: result[0] === result[1],
-            effect: result[0] === result[1] ? 'リーチ' : '次停止',
+            reach: isReachResult,
+            effect: isReachResult ? 'リーチ' : '次停止',
+            spinOverlay: prev.spinOverlay.active
+              ? {
+                  ...prev.spinOverlay,
+                  reels: [result[0], result[1], prev.spinOverlay.reels[2]],
+                  locked: [true, true, false],
+                  reach: isReachResult,
+                  message: isReachResult ? 'リーチ発展' : '二図柄停止',
+                }
+              : prev.spinOverlay,
           }))
-          if (result[0] === result[1]) playTone('win')
+          if (isReachResult) playTone('win')
         }, 1240),
       )
       pushTimer(
         window.setTimeout(() => {
           locked[2] = result[2]
           clearSpinTimers()
+
+          if (spinAudioRef.current) {
+            spinAudioRef.current.pause()
+            spinAudioRef.current.currentTime = 0
+          }
+
           const won = result[0] === result[1] && result[1] === result[2]
           setGame((prev) => {
             const feverLeft = prev.fever && !won ? Math.max(0, prev.feverSpinsLeft - 1) : prev.feverSpinsLeft
@@ -700,31 +884,79 @@ export default function App() {
               reels: result,
               fever: won ? prev.fever : feverLeft > 0,
               feverSpinsLeft: won ? prev.feverSpinsLeft : feverLeft,
-              effect: won ? '大当たり' : feverLeft > 0 ? `フィーバー残り${feverLeft}` : 'ハズレ',
+              spinOverlay: prev.spinOverlay.active
+                ? {
+                    ...prev.spinOverlay,
+                    reels: result,
+                    locked: [true, true, true],
+                    reach: false,
+                    won,
+                    final: true,
+                    message: won ? `${result.join('')} 揃い` : `${result.join('')} 停止`,
+                  }
+                : prev.spinOverlay,
+              effect: won ? '大当たり' : feverLeft > 0 ? `フィー버残り${feverLeft}` : 'ハズレ',
               log: mixLog(prev.log, won ? `${result.join('')} 揃い` : `${result.join('')} ハズレ`),
             }
           })
 
           if (won) {
-            window.setTimeout(() => beginJackpot(result[0]), 600)
+            const jackpotTimer = window.setTimeout(() => {
+                if (jackpotLogicRef.current.beginJackpot) {
+                    jackpotLogicRef.current.beginJackpot(result[0])
+                }
+            }, 780)
+            pushTimer(jackpotTimer)
           } else {
             playTone('miss')
             scheduleNextHeldSpin()
           }
+          const hideOverlayTimer = window.setTimeout(() => {
+            setGame((prev) => ({
+              ...prev,
+              spinOverlay: {
+                ...prev.spinOverlay,
+                active: false,
+              },
+            }))
+          }, won ? 1000 : 820)
+          pushTimer(hideOverlayTimer)
         }, 2300),
       )
     },
-    [beginJackpot, clearSpinTimers, playTone, pushTimer, scheduleNextHeldSpin],
+    [clearSpinTimers, playTone, pushTimer, scheduleNextHeldSpin, soundOn],
   )
+
+  useEffect(() => {
+    jackpotLogicRef.current = {
+      beginJackpot,
+      endJackpot,
+      closeRound,
+      startSpin
+    }
+  }, [beginJackpot, endJackpot, closeRound, startSpin])
 
   const onStartPocket = useCallback(() => {
     playTone('start')
-    setGame((prev) => ({
-      ...prev,
-      captured: prev.captured + 1,
-      payout: prev.payout + 1,
-      ammo: prev.ammo + 1,
-    }))
+    setGame((prev) => {
+      const addedRevenue = prev.jackpot.active ? JACKPOT_NAVEL_VALUE_YEN : 0
+      const newEarned = prev.jackpot.active ? prev.jackpot.earned + addedRevenue : 0
+      return {
+        ...prev,
+        captured: prev.captured + 1,
+        payout: prev.payout + 1,
+        ammo: prev.ammo + 1,
+        jackpotNavelRevenue: prev.jackpotNavelRevenue + addedRevenue,
+        effect: prev.jackpot.active ? `へそ入賞 +¥${addedRevenue}` : prev.effect,
+        jackpot: {
+          ...prev.jackpot,
+          earned: newEarned,
+        },
+        log: prev.jackpot.active
+          ? mixLog(prev.log, `大当たり中 へそ入賞 +¥${addedRevenue}`)
+          : prev.log,
+      }
+    })
     startSpin(false)
   }, [playTone, startSpin])
 
@@ -748,6 +980,7 @@ export default function App() {
     if (!current.jackpot.open) return
     playTone('win')
     const nextHits = current.jackpot.hits + 1
+    const payoutValue = 10 * BALL_VALUE_YEN
     setGame((prev) => ({
       ...prev,
       captured: prev.captured + 1,
@@ -757,13 +990,24 @@ export default function App() {
       jackpot: {
         ...prev.jackpot,
         hits: prev.jackpot.hits + 1,
+        earned: prev.jackpot.earned + payoutValue,
       },
       log: mixLog(prev.log, `アタッカー入賞 +10`),
     }))
     if (nextHits >= 6) {
-      closeRound()
+      if (jackpotLogicRef.current.closeRound) {
+        jackpotLogicRef.current.closeRound()
+      }
     }
-  }, [closeRound, playTone])
+  }, [playTone])
+
+  useEffect(() => {
+    if (game.jackpot.active && game.jackpot.shots >= 300) {
+      if (jackpotLogicRef.current.endJackpot) {
+        jackpotLogicRef.current.endJackpot()
+      }
+    }
+  }, [game.jackpot.active, game.jackpot.shots])
 
   useEffect(() => {
     callbacksRef.current = {
@@ -781,8 +1025,8 @@ export default function App() {
     }
     lastShotRef.current = now
     const launchPower = power / 100
-    const vx = -0.72 - launchPower * 1.22 + (Math.random() - 0.5) * 0.22
-    const vy = -7.2 - launchPower * 4.55
+    const vx = 0.12 + launchPower * 0.18 + (Math.random() - 0.5) * 0.08
+    const vy = -10.6 - launchPower * 5.9
     ballsRef.current.push({
       id: ballIdRef.current,
       x: 326,
@@ -792,6 +1036,7 @@ export default function App() {
       r: BALL_R,
       born: now,
       stuck: 0,
+      launchRail: true,
       startBias: Math.random() < 0.42,
     })
     ballIdRef.current += 1
@@ -799,7 +1044,8 @@ export default function App() {
       ...prev,
       ammo: prev.ammo - 1,
       shots: prev.shots + 1,
-      effect: '発射',
+      jackpot: prev.jackpot.active ? { ...prev.jackpot, shots: prev.jackpot.shots + 1 } : prev.jackpot,
+      effect: '발사',
     }))
     playTone('shoot')
   }, [playTone, power])
@@ -871,9 +1117,23 @@ export default function App() {
         ball.x += ball.vx * dt
         ball.y += ball.vy * dt
 
+        if (ball.launchRail && ball.vy < 0 && ball.y > 70) {
+          const railX = 327 + Math.sin((now + ball.id * 97) / 120) * 1.2
+          ball.x += (railX - ball.x) * 0.55
+          ball.vx = clamp(ball.vx, -0.08, 0.42)
+          ball.vy -= 0.035 * dt
+        }
+        if (ball.launchRail && ball.y <= 72) {
+          ball.launchRail = false
+          ball.x = 321
+          ball.y = 72
+          ball.vx = -2.65 - Math.random() * 0.55
+          ball.vy = 1.05 + Math.random() * 0.65
+        }
+
         if (ball.x > 310 && ball.y > 78 && ball.vy < 0) {
-          ball.x = clamp(ball.x, 312, 331)
-          ball.vx += 0.035 * dt
+          ball.x = clamp(ball.x, 320, 331)
+          ball.vx += 0.075 * dt
         }
         if (ball.x > 300 && ball.y <= 78) {
           ball.vx -= 0.78
@@ -1002,8 +1262,8 @@ export default function App() {
           balls.splice(index, 1)
         }
 
-        if (speed > 13.2) {
-          const scale = 13.2 / speed
+        if (speed > 18.5) {
+          const scale = 18.5 / speed
           ball.vx *= scale
           ball.vy *= scale
         }
@@ -1048,7 +1308,8 @@ export default function App() {
     const investment = game.shots * BALL_VALUE_YEN
     const ballRevenue = game.payout * BALL_VALUE_YEN
     const jackpotRevenue = game.jackpots * JACKPOT_VALUE_YEN
-    const grossRevenue = ballRevenue + jackpotRevenue
+    const navelRevenue = game.jackpotNavelRevenue
+    const grossRevenue = ballRevenue + jackpotRevenue + navelRevenue
     const netProfit = grossRevenue - investment
 
     return {
@@ -1056,9 +1317,10 @@ export default function App() {
       grossRevenue,
       investment,
       jackpotRevenue,
+      navelRevenue,
       netProfit,
     }
-  }, [game.jackpots, game.payout, game.shots])
+  }, [game.jackpotNavelRevenue, game.jackpots, game.payout, game.shots])
 
   return (
     <main className="appShell">
@@ -1078,7 +1340,7 @@ export default function App() {
             <MikuMark />
             <div>
               <p>初音ミク風ウェブパチンコ</p>
-              <h1>ミクパチフィーバー</h1>
+              <h1>だいごみくパチンコ</h1>
             </div>
           </div>
           <button className="iconButton" type="button" aria-label="音量" onClick={() => setSoundOn((value) => !value)}>
@@ -1120,8 +1382,12 @@ export default function App() {
                   <span>大当り</span>
                   <b>{formatYen(money.jackpotRevenue)}</b>
                 </div>
+                <div>
+                  <span>へそ賞</span>
+                  <b>{formatYen(money.navelRevenue)}</b>
+                </div>
               </div>
-              <p>1玉 4円 / 大当たり 16,000円</p>
+              <p>1玉 4円 / 大当たり 16,000円 / 大当たり中へそ入賞 400円 / 400玉発射で終了 (39%継続)</p>
             </div>
 
             <div className="statsGrid">
@@ -1193,6 +1459,7 @@ export default function App() {
           </aside>
         </section>
       </div>
+      <SpinOverlay overlay={game.spinOverlay} />
       <JackpotSplash splash={game.jackpotSplash} />
     </main>
   )
